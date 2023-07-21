@@ -50,22 +50,39 @@ fn try_unify_many(mut eqs: Vec<(Formula, Formula)>) -> Option<Vec<(usize, Formul
     Some(solution)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Formula {
     Var(usize),
     Implication(Box<Formula>, Box<Formula>),
     Not(Box<Formula>),
 }
 
+#[derive(Debug)]
+pub enum FormulaParseError {
+    MismatchedParen,
+    UnexpectedEOF,
+    UnexpectedChar(char)
+}
+
 impl FromStr for Formula {
-    type Err;
+    type Err = FormulaParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        todo!()
+        parse::parse(s)
     }
 }
 
+pub fn implication(a: Formula, b: Formula) -> Formula {
+    Formula::Implication(Box::new(a), Box::new(b))
+}
+pub fn not(a: Formula) -> Formula {
+    Formula::Not(Box::new(a))
+}
+
 impl Formula {
+    
+
+
     fn subst(&self, s: &Vec<(usize,Formula)>) -> Formula {
         match self {
             Formula::Var(v) => {
