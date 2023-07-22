@@ -1,6 +1,11 @@
-use crate::{Formula, FormulaParseError, implication, not};
+use super::{Formula, implication, not};
 
-
+#[derive(Debug)]
+pub enum FormulaParseError {
+    MismatchedParen,
+    UnexpectedEOF,
+    UnexpectedChar(char),
+}
 
 
 pub fn parse(mut s: &str) -> Result<Formula,FormulaParseError> {
@@ -69,7 +74,8 @@ fn eat_space(s: &mut &str) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Formula::*, implication};
+    use super::Formula::*;
+    use crate::AXIOMS;
 
     #[test]
     fn basic() {
@@ -80,8 +86,24 @@ mod test {
 
     #[test]
     fn brackets() {
-        assert_eq!(parse("(1 -> 2) -> 3").unwrap(), implication(implication(Var(1), Var(2)), Var(3)))
+        assert_eq!(parse("(1 -> 2) -> 3").unwrap(), implication(implication(Var(1), Var(2)), Var(3)));
+        assert_eq!(parse("-(1 -> 2) -> 3").unwrap(), implication(not(implication(Var(1), Var(2))), Var(3)));
     }
 
-    
+    #[test]
+    fn axioms() {
+        assert_eq!(
+            AXIOMS.iter().map(|s| parse(s).unwrap()).collect::<Vec<_>>(),
+            vec![
+                implication(Var(1), implication(Var(2), Var(1))),
+                implication(implication(Var(1), implication(Var(2), Var(3))), implication(implication(Var(1), Var(2)), implication(Var(1), Var(3)))),
+                implication(implication(Var(1), implication(Var(2), Var(3))), implication(Var(2), implication(Var(1), Var(3)))),
+                implication(implication(Var(1), Var(2)), implication(not(Var(2)), not(Var(1)))),
+                implication(not(not(Var(1))), Var(1)),
+                implication(Var(1), not(not(Var(1)))),
+            ]
+        )
+    }
+
+
 }
