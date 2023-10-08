@@ -12,7 +12,7 @@ pub fn modus_ponens(p: &Normal, f: &Normal) -> Option<Normal> {
         let Entry::Implication(p2idx, qidx) = arena[fidx] else {
             panic!("no longer an implication?");
         };
-        if let Some(s) = unify::unify(&mut arena, p1idx, p2idx) {
+        if let Some(_) = unify::unify(&mut arena, p1idx, p2idx) {
             return Some(Normal::from_arena(&arena, qidx));
         }
     }

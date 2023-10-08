@@ -4,6 +4,8 @@ use std::{fmt::Display, io::Write, str::FromStr};
 
 use formula::{modus_ponens, Formula, Normal};
 
+use rayon::prelude::*;
+
 mod formula;
 
 pub static AXIOMS: &[&str] = &[
@@ -93,44 +95,55 @@ impl Context {
         &self.entries[self.new_entries_at..]
     }
 
-    fn step(&mut self) {
-        let next_idx = self.entries.len();
-        let mut result: Vec<Entry> = Vec::new();
-        let mut try_mp_all = |a: &[Entry], b: &[Entry]| {
-            for Entry {
-                formula: f,
-                index: f_idx,
-                ..
-            } in a.iter()
-            {
-                if f.is_implication() {
-                    for Entry {
-                        formula: p,
-                        index: p_idx,
-                        ..
-                    } in b.iter()
-                    {
-                        if let Some(new) = modus_ponens(p, f) {
-                            if !(self.entries.iter().any(|e| e.formula == new)
-                                || result.iter().any(|e| e.formula == new))
-                            {
-                                result.push(Entry {
-                                    formula: new,
-                                    source: Source::MP(*p_idx, *f_idx),
-                                    index: self.next_index,
-                                });
-                                self.next_index += 1;
-                            }
-                        }
-                    }
-                }
+    pub fn append(&mut self, other: Vec<(Normal, Source)>) {
+        self.entries.reserve(other.len());
+        for (f, s) in other {
+            if !self.entries.iter().any(|e| e.formula == f) {
+                self.entries.push(Entry {
+                    index: self.next_index,
+                    source: s,
+                    formula: f,
+                });
+                self.next_index += 1;
             }
-        };
+        }
+    }
 
-        try_mp_all(&self.entries, &self.entries[self.new_entries_at..]);
-        try_mp_all(&self.entries[self.new_entries_at..], &self.entries);
+    fn step(&mut self) {
+        fn try_mp_all<'a>(
+            a: &'a [Entry],
+            b: &'a [Entry],
+        ) -> impl ParallelIterator<Item = (Normal, Source)> + 'a {
+            a.par_iter()
+                .filter(|e| e.formula.is_implication())
+                .flat_map(
+                    |Entry {
+                         formula: f,
+                         index: f_idx,
+                         ..
+                     }| {
+                        b.par_iter().filter_map(
+                            |Entry {
+                                 index: p_idx,
+                                 formula: p,
+                                 ..
+                             }| {
+                                Some((modus_ponens(p, f)?, Source::MP(*p_idx, *f_idx)))
+                            },
+                        )
+                    },
+                )
+        }
 
-        self.entries.append(&mut result);
+        let next_idx = self.entries.len();
+
+        let (res_a, res_b) = (
+            try_mp_all(&self.entries, &self.entries[self.new_entries_at..]),
+            try_mp_all(&self.entries[self.new_entries_at..], &self.entries),
+        );
+
+        let res = res_a.chain(res_b).collect::<Vec<_>>();
+
         self.new_entries_at = next_idx;
     }
 }
