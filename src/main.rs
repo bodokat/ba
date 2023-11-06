@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic)]
 
-use std::{fmt::Display, io::Write, str::FromStr};
+use std::{collections::HashSet, fmt::Display, io::Write, str::FromStr};
 
 use formula::{modus_ponens, Formula, Normal};
 
@@ -27,11 +27,11 @@ fn main() {
 
     for run in 0..runs {
         writeln!(file, "added in run {run}:").unwrap();
-        for (i, entry) in context.new_entries().iter().enumerate() {
-            let i = i + context.new_entries_at;
+        for (i, entry) in context.entries.iter().enumerate() {
             writeln!(
                 file,
                 "{i}: {formula} [{source}]",
+                i = entry.index,
                 formula = entry.formula,
                 source = entry.source
             )
@@ -44,11 +44,11 @@ fn main() {
 }
 
 struct Context {
-    entries: Vec<Entry>,
-    new_entries_at: usize,
-    next_index: usize,
+    entries: HashSet<Entry>,
+    new_entries: Vec<Entry>,
 }
 
+#[derive(PartialEq, Eq, Hash)]
 struct Entry {
     index: usize,
     source: Source,
@@ -64,6 +64,7 @@ impl Display for Source {
     }
 }
 
+#[derive(PartialEq, Eq, Hash)]
 enum Source {
     Axiom,
     MP(usize, usize),
@@ -71,7 +72,7 @@ enum Source {
 
 impl Default for Context {
     fn default() -> Self {
-        let entries: Vec<Entry> = AXIOMS
+        let new_entries: Vec<Entry> = AXIOMS
             .iter()
             .map(|s| Formula::from_str(s).unwrap().into())
             .enumerate()
@@ -81,38 +82,36 @@ impl Default for Context {
                 formula: f,
             })
             .collect();
-        let next_index = entries.len();
         Self {
-            entries,
-            new_entries_at: 0,
-            next_index,
+            entries: HashSet::new(),
+            new_entries,
         }
     }
 }
 
 impl Context {
-    fn new_entries(&self) -> &[Entry] {
-        &self.entries[self.new_entries_at..]
-    }
+    // fn new_entries(&self) -> &[Entry] {
+    //     &self.entries[self.new_entries_at..]
+    // }
 
-    pub fn append(&mut self, other: Vec<(Normal, Source)>) {
-        self.entries.reserve(other.len());
-        for (f, s) in other {
-            if !self.entries.iter().any(|e| e.formula == f) {
-                self.entries.push(Entry {
-                    index: self.next_index,
-                    source: s,
-                    formula: f,
-                });
-                self.next_index += 1;
-            }
-        }
-    }
+    // pub fn append(&mut self, other: Vec<(Normal, Source)>) {
+    //     self.entries.reserve(other.len());
+    //     for (f, s) in other {
+    //         if !self.entries.iter().any(|e| e.formula == f) {
+    //             self.entries.insert(Entry {
+    //                 index: self.next_index,
+    //                 source: s,
+    //                 formula: f,
+    //             });
+    //             self.next_index += 1;
+    //         }
+    //     }
+    // }
 
     fn step(&mut self) {
         fn try_mp_all<'a>(
-            a: &'a [Entry],
-            b: &'a [Entry],
+            a: &'a (impl IntoParallelRefIterator<'a, Item = &'a Entry> + Sync),
+            b: &'a (impl IntoParallelRefIterator<'a, Item = &'a Entry> + Sync),
         ) -> impl ParallelIterator<Item = (Normal, Source)> + 'a {
             a.par_iter()
                 .filter(|e| e.formula.is_implication())
@@ -134,16 +133,20 @@ impl Context {
                     },
                 )
         }
+        let res = try_mp_all(&self.entries, &self.new_entries)
+            .chain(try_mp_all(&self.new_entries, &self.entries))
+            .chain(try_mp_all(&self.new_entries, &self.new_entries));
 
-        let next_idx = self.entries.len();
+        let new_entries = res
+            .map(|(f, s)| Entry {
+                index: 0,
+                source: s,
+                formula: f,
+            })
+            .collect();
 
-        let (res_a, res_b) = (
-            try_mp_all(&self.entries, &self.entries[self.new_entries_at..]),
-            try_mp_all(&self.entries[self.new_entries_at..], &self.entries),
-        );
+        self.entries.extend(self.new_entries.drain(..));
 
-        let res = res_a.chain(res_b).collect::<Vec<_>>();
-
-        self.new_entries_at = next_idx;
+        self.new_entries = new_entries;
     }
 }

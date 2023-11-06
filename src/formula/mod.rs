@@ -183,12 +183,12 @@ impl FromStr for Formula {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Normal {
     elems: Vec<NormalEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum NormalEntry {
     Implication,
     Not,
