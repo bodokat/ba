@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic)]
 
-use std::{collections::HashSet, fmt::Display, io::Write, str::FromStr};
+use std::{collections::HashSet, fmt::Display, io::Write, str::FromStr, sync::atomic::AtomicUsize};
 
 use formula::{modus_ponens, Formula, Normal};
 
@@ -27,7 +27,7 @@ fn main() {
 
     for run in 0..runs {
         writeln!(file, "added in run {run}:").unwrap();
-        for (i, entry) in context.entries.iter().enumerate() {
+        for (_, entry) in context.entries.iter().enumerate() {
             writeln!(
                 file,
                 "{i}: {formula} [{source}]",
@@ -46,6 +46,7 @@ fn main() {
 struct Context {
     entries: HashSet<Entry>,
     new_entries: Vec<Entry>,
+    next_idx: AtomicUsize,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -82,9 +83,11 @@ impl Default for Context {
                 formula: f,
             })
             .collect();
+        let next_idx = AtomicUsize::new(new_entries.len());
         Self {
             entries: HashSet::new(),
             new_entries,
+            next_idx,
         }
     }
 }
@@ -115,23 +118,14 @@ impl Context {
         ) -> impl ParallelIterator<Item = (Normal, Source)> + 'a {
             a.par_iter()
                 .filter(|e| e.formula.is_implication())
-                .flat_map(
-                    |Entry {
-                         formula: f,
-                         index: f_idx,
-                         ..
-                     }| {
-                        b.par_iter().filter_map(
-                            |Entry {
-                                 index: p_idx,
-                                 formula: p,
-                                 ..
-                             }| {
-                                Some((modus_ponens(p, f)?, Source::MP(*p_idx, *f_idx)))
-                            },
-                        )
-                    },
-                )
+                .flat_map(|e1: &Entry| {
+                    b.par_iter().filter_map(|e2: &Entry| {
+                        Some((
+                            modus_ponens(&e1.formula, &e2.formula)?,
+                            Source::MP(e1.index, e2.index),
+                        ))
+                    })
+                })
         }
         let res = try_mp_all(&self.entries, &self.new_entries)
             .chain(try_mp_all(&self.new_entries, &self.entries))
@@ -139,7 +133,9 @@ impl Context {
 
         let new_entries = res
             .map(|(f, s)| Entry {
-                index: 0,
+                index: self
+                    .next_idx
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                 source: s,
                 formula: f,
             })

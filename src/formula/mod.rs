@@ -112,10 +112,6 @@ impl Formula {
         Idx(0)
     }
 
-    pub fn toplevel_entry(&self) -> Entry {
-        self.arena[self.toplevel_idx()].clone()
-    }
-
     fn each_index<F: FnMut(&mut Idx)>(&mut self, mut f: F) {
         for elem in self.arena.0.iter_mut() {
             match elem {

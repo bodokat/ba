@@ -1,4 +1,4 @@
-use super::{Arena, Entry, Formula, Idx, Normal, NormalEntry};
+use super::{Arena, Entry, Idx, Normal, NormalEntry};
 
 pub fn modus_ponens(p: &Normal, f: &Normal) -> Option<Normal> {
     if f.elems[0] == NormalEntry::Implication {
@@ -17,56 +17,6 @@ pub fn modus_ponens(p: &Normal, f: &Normal) -> Option<Normal> {
         }
     }
     None
-}
-
-fn clone_children_to(from: &Arena, from_e: &Entry, to: &mut Arena) -> Entry {
-    match from_e {
-        e @ Entry::Var(_) => e.clone(),
-        Entry::Implication(a, b) => {
-            let a1 = Idx(to.0.len());
-            clone_to(from, *a, to);
-            let b1 = Idx(to.0.len());
-            clone_to(from, *b, to);
-            Entry::Implication(a1, b1)
-        }
-        Entry::Not(a) => {
-            let a1 = Idx(to.0.len());
-            clone_to(from, *a, to);
-            Entry::Not(a1)
-        }
-    }
-}
-
-fn clone_to(from: &Arena, from_i: Idx, to: &mut Arena) {
-    match &from[from_i] {
-        e @ Entry::Var(_) => to.0.push(e.clone()),
-        e @ Entry::Implication(_, _) => {
-            let i = Idx(to.0.len());
-            to.0.push(e.clone()); //Sentinel value
-            let new_e = clone_children_to(from, e, to);
-            to[i] = new_e;
-        }
-        e @ Entry::Not(_) => {
-            let i = Idx(to.0.len());
-            to.0.push(e.clone()); //Sentinel value
-            let new_e = clone_children_to(from, e, to);
-            to[i] = new_e;
-        }
-    }
-}
-
-fn substitute_many_to(from: &Arena, to: &mut Formula, mut s: Vec<(usize, Entry)>) {
-    s.iter_mut().for_each(|(_, e)| {
-        let new_entry = clone_children_to(from, &e, &mut to.arena);
-        *e = new_entry;
-    });
-    to.arena.0.iter_mut().for_each(|entry| {
-        if let Entry::Var(v) = entry {
-            if let Some((_, r)) = s.iter().find(|(var, _)| var == v) {
-                *entry = r.clone();
-            }
-        }
-    })
 }
 
 fn make_disjoint(arena: &mut Arena, f: &Normal) {
