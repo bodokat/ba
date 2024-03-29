@@ -266,10 +266,6 @@ impl Normal {
             }
         }
     }
-
-    pub fn is_implication(&self) -> bool {
-        self.elems[0] == NormalEntry::Implication
-    }
 }
 
 impl Display for Normal {
