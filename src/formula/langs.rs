@@ -1,4 +1,4 @@
-use std::{fmt::Display, mem};
+use std::{fmt::Display, hash::Hash, mem};
 
 use super::language::{Language, Normal, Term};
 
@@ -12,27 +12,31 @@ enum ImpNegEnum<S> {
 pub struct ImpNeg;
 
 impl Language for ImpNeg {
-    type Variant<S> = ImpNegEnum<S>;
+    type Variant<S> = ImpNegEnum<S>
+        where S: Hash + Clone;
 
-    fn matches<S>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool {
+    fn matches<S: Hash + Clone>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool {
         mem::discriminant(this) == mem::discriminant(other)
     }
 
-    fn children<S>(this: &Self::Variant<S>) -> &[S] {
+    fn children<S: Hash + Clone>(this: &Self::Variant<S>) -> &[S] {
         match this {
             ImpNegEnum::Implication(x) => x,
             ImpNegEnum::Negation(x) => x,
         }
     }
 
-    fn match_implication<S>(this: &Self::Variant<S>) -> Option<&[S; 2]> {
+    fn match_implication<S: Hash + Clone>(this: &Self::Variant<S>) -> Option<&[S; 2]> {
         match this {
             ImpNegEnum::Implication(x) => Some(x),
             ImpNegEnum::Negation(_) => None,
         }
     }
 
-    fn map<S, T, F: FnMut(S) -> T>(this: &Self::Variant<S>, f: F) -> Self::Variant<T> {
+    fn map<S: Hash + Clone, T: Hash + Clone, F: FnMut(&S) -> T>(
+        this: &Self::Variant<S>,
+        mut f: F,
+    ) -> Self::Variant<T> {
         match this {
             ImpNegEnum::Implication([a, b]) => ImpNegEnum::Implication([f(a), f(b)]),
             ImpNegEnum::Negation([a]) => ImpNegEnum::Negation([f(a)]),
@@ -43,60 +47,43 @@ impl Language for ImpNeg {
 impl Display for ImpNegEnum<()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ImpNegEnum::Implication(_) => "->",
-            ImpNegEnum::Negation(_) => "~",
+            ImpNegEnum::Implication(_) => write!(f, "->"),
+            ImpNegEnum::Negation(_) => write!(f, "~"),
         }
     }
 }
 
 pub fn frege_axioms() -> Vec<Normal<ImpNeg>> {
-    use ImpNegEnum::{Implication as I, Negation as N};
-    use Term::{Term as T, Var as V};
+    use ImpNegEnum::*;
+    use Term::Var as V;
+    fn i() -> Term<ImpNeg, ()> {
+        Term::Term(Implication([(), ()]))
+    }
+    fn n() -> Term<ImpNeg, ()> {
+        Term::Term(Negation([()]))
+    }
     [
-        [T(I(())), V(0), T(I(())), V(1), V(0)].into(),
+        [i(), V(0), i(), V(1), V(0)].into(),
         [
-            T(I(())),
-            T(I(())),
+            i(),
+            i(),
             V(0),
-            T(I(())),
+            i(),
             V(1),
             V(2),
-            T(I(())),
-            T(I(())),
+            i(),
+            i(),
             V(0),
             V(1),
-            T(I(())),
+            i(),
             V(0),
             V(2),
         ]
         .into(),
-        [
-            T(I(())),
-            T(I(())),
-            V(0),
-            T(I(())),
-            V(1),
-            V(2),
-            T(I(())),
-            V(1),
-            T(I(())),
-            V(0),
-            V(2),
-        ]
-        .into(),
-        [
-            T(I(())),
-            T(I(())),
-            V(0),
-            V(1),
-            T(I(())),
-            T(N(())),
-            V(1),
-            T(N(())),
-            V(0),
-        ]
-        .into(),
-        [T(I(())), T(N(())), T(N(())), V(0), V(0)].into(),
-        [T(I(())), V(0), T(N(())), T(N(())), V(0)].into(),
+        [i(), i(), V(0), i(), V(1), V(2), i(), V(1), i(), V(0), V(2)].into(),
+        [i(), i(), V(0), V(1), i(), n(), V(1), n(), V(0)].into(),
+        [i(), n(), n(), V(0), V(0)].into(),
+        [i(), V(0), n(), n(), V(0)].into(),
     ]
+    .into()
 }

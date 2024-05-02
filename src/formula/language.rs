@@ -1,19 +1,24 @@
 use std::{fmt::Display, hash::Hash, mem::MaybeUninit};
 
-pub trait Language: PartialEq + Eq + Clone + Hash {
-    type Variant<S>: PartialEq + Eq + Clone + Hash;
+pub trait Language: Clone + Hash {
+    type Variant<S>: Clone + Hash
+    where
+        S: Hash + Clone;
 
-    fn matches<S>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool;
+    fn matches<S: Hash + Clone>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool;
 
-    fn children<S>(this: &Self::Variant<S>) -> &[S];
+    fn children<S: Hash + Clone>(this: &Self::Variant<S>) -> &[S];
 
-    fn match_implication<S>(this: &Self::Variant<S>) -> Option<&[S; 2]>;
+    fn match_implication<S: Hash + Clone>(this: &Self::Variant<S>) -> Option<&[S; 2]>;
 
-    fn map<S, T, F: FnMut(S) -> T>(this: &Self::Variant<S>, f: F) -> Self::Variant<T>;
+    fn map<S: Hash + Clone, T: Hash + Clone, F: FnMut(&S) -> T>(
+        this: &Self::Variant<S>,
+        f: F,
+    ) -> Self::Variant<T>;
 }
 
-#[derive(PartialEq, Eq, Clone, Hash)]
-pub enum Term<L: Language, S> {
+#[derive(Clone, Hash)]
+pub enum Term<L: Language, S: Hash + Clone> {
     Term(L::Variant<S>),
     Var(usize),
 }
@@ -83,7 +88,7 @@ impl<L: Language> Normal<L> {
             match &arena.0[idx] {
                 &Term::Var(x) => v.push(Term::Var(x)),
                 Term::Term(t) => {
-                    v.push(Term::Term(L::map(&t, |_: usize| ())));
+                    v.push(Term::Term(L::map(&t, |_: &usize| ())));
                     for &c in L::children(&t) {
                         inner(v, arena, c);
                     }
@@ -131,14 +136,21 @@ impl<L: Language> Normal<L> {
     }
 }
 
+impl<L: Language, const N: usize> From<[Term<L, ()>; N]> for Normal<L> {
+    fn from(value: [Term<L, ()>; N]) -> Self {
+        Self(Box::new(value))
+    }
+}
+
 pub struct Arena<L: Language>(Box<[Term<L, usize>]>);
 
 impl<L: Language> Arena<L> {
     fn substitute(&mut self, var: usize, term: &Term<L, usize>) {
-        self.0.iter_mut().for_each(|t| {
-            if *t == Term::Var(var) {
+        self.0.iter_mut().for_each(|t| match *t {
+            Term::Var(v) if v == var => {
                 *t = term.clone();
             }
+            _ => {}
         })
     }
 }
