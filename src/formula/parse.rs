@@ -72,7 +72,7 @@ fn eat_space(s: &mut &str) {
 
 #[cfg(test)]
 mod test {
-    use crate::AXIOMS;
+    use crate::context::AXIOMS;
 
     use super::super::Formula;
     use super::parse;

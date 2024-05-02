@@ -1,3 +1,5 @@
+mod langs;
+pub mod language;
 mod mp;
 pub mod parse;
 pub use mp::modus_ponens;
@@ -180,7 +182,7 @@ impl FromStr for Formula {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Normal {
+pub struct Normalized {
     elems: Vec<NormalEntry>,
 }
 
@@ -191,7 +193,7 @@ enum NormalEntry {
     Var(usize),
 }
 
-impl Normal {
+impl Normalized {
     fn from_arena(arena: &Arena, i: Idx) -> Self {
         let mut elems = Vec::with_capacity(arena.0.len());
         fn inner(elems: &mut Vec<NormalEntry>, arena: &Arena, i: Idx) {
@@ -266,9 +268,13 @@ impl Normal {
             }
         }
     }
+
+    pub fn size(&self) -> usize {
+        self.elems.len()
+    }
 }
 
-impl Display for Normal {
+impl Display for Normalized {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn inner(
             val: &[NormalEntry],
@@ -308,15 +314,15 @@ impl Display for Normal {
     }
 }
 
-impl From<Formula> for Normal {
+impl From<Formula> for Normalized {
     fn from(value: Formula) -> Self {
-        Normal::from_formula(&value)
+        Normalized::from_formula(&value)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{parse::parse, Normal};
+    use super::{parse::parse, Normalized};
 
     #[test]
     fn normalize() {
@@ -326,8 +332,8 @@ mod test {
             "5 -> 1 -> -5 -> 3 -> --1",
             "2 -> 1 -> -3 -> 5 -> --1",
         ]
-        .map(|x| Normal::from(parse(x).unwrap()));
-        let expected = Normal::from(parse("1 -> 2 -> -1 -> 3 -> --2").unwrap());
+        .map(|x| Normalized::from(parse(x).unwrap()));
+        let expected = Normalized::from(parse("1 -> 2 -> -1 -> 3 -> --2").unwrap());
         for case in test_cases.iter() {
             assert_eq!(*case, expected);
         }

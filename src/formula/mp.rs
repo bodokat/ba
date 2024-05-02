@@ -1,6 +1,6 @@
-use super::{Arena, Entry, Idx, Normal, NormalEntry};
+use super::{Arena, Entry, Idx, Normalized, NormalEntry};
 
-pub fn modus_ponens(p: &Normal, f: &Normal) -> Option<Normal> {
+pub fn modus_ponens(p: &Normalized, f: &Normalized) -> Option<Normalized> {
     if f.elems[0] == NormalEntry::Implication {
         let mut arena = Arena(Vec::with_capacity(p.elems.len() + f.elems.len()));
         p.write_into(&mut arena);
@@ -13,13 +13,13 @@ pub fn modus_ponens(p: &Normal, f: &Normal) -> Option<Normal> {
             panic!("no longer an implication?");
         };
         if let Some(_) = unify::unify(&mut arena, p1idx, p2idx) {
-            return Some(Normal::from_arena(&arena, qidx));
+            return Some(Normalized::from_arena(&arena, qidx));
         }
     }
     None
 }
 
-fn make_disjoint(arena: &mut Arena, f: &Normal) {
+fn make_disjoint(arena: &mut Arena, f: &Normalized) {
     let max_var = f
         .elems
         .iter()
@@ -88,23 +88,23 @@ mod unify {
 
 #[cfg(test)]
 mod test {
-    use crate::formula::{modus_ponens, Normal};
+    use crate::formula::{modus_ponens, Normalized};
 
     #[test]
     fn mp() {
-        let p = Normal::from_formula(&"1 -> --1".parse().unwrap());
-        let q = Normal::from_formula(&"1 -> 2 -> 1".parse().unwrap());
+        let p = Normalized::from_formula(&"1 -> --1".parse().unwrap());
+        let q = Normalized::from_formula(&"1 -> 2 -> 1".parse().unwrap());
         let f = modus_ponens(&p, &q).unwrap();
-        assert_eq!(f, Normal::from_formula(&"2 -> 4 -> --4".parse().unwrap()));
+        assert_eq!(f, Normalized::from_formula(&"2 -> 4 -> --4".parse().unwrap()));
     }
 
     #[test]
     fn eq() {
-        let p = Normal::from_formula(&"1 -> 2 -> 1".parse().unwrap());
-        let q = Normal::from_formula(&"1 -> 2 -> 3 -> 2".parse().unwrap());
+        let p = Normalized::from_formula(&"1 -> 2 -> 1".parse().unwrap());
+        let q = Normalized::from_formula(&"1 -> 2 -> 3 -> 2".parse().unwrap());
         assert_eq!(
             modus_ponens(&p, &q).unwrap(),
-            Normal::from_formula(&"1 -> 2 -> 1".parse().unwrap())
+            Normalized::from_formula(&"1 -> 2 -> 1".parse().unwrap())
         )
     }
 }
