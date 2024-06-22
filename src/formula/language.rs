@@ -1,28 +1,38 @@
 use std::{fmt::Display, hash::Hash, mem::MaybeUninit};
 
-pub trait Language: Clone + Hash {
-    type Variant<S>: Clone + Hash
+pub trait Language: Clone + Hash + PartialEq + Eq + Send + Sync + 'static {
+    type Variant<S>: Clone + Hash + PartialEq + Eq + Send + Sync
     where
-        S: Hash + Clone;
+        S: Clone + Hash + PartialEq + Eq + Send + Sync;
 
-    fn matches<S: Hash + Clone>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool;
+    fn matches<S: Clone + Hash + PartialEq + Eq + Send + Sync>(
+        this: &Self::Variant<S>,
+        other: &Self::Variant<S>,
+    ) -> bool;
 
-    fn children<S: Hash + Clone>(this: &Self::Variant<S>) -> &[S];
+    fn children<S: Clone + Hash + PartialEq + Eq + Send + Sync>(this: &Self::Variant<S>) -> &[S];
 
-    fn match_implication<S: Hash + Clone>(this: &Self::Variant<S>) -> Option<&[S; 2]>;
+    fn match_implication<S: Clone + Hash + PartialEq + Eq + Send + Sync>(
+        this: &Self::Variant<S>,
+    ) -> Option<&[S; 2]>;
 
-    fn map<S: Hash + Clone, T: Hash + Clone, F: FnMut(&S) -> T>(
+    fn map<
+        S: Clone + Hash + PartialEq + Eq + Send + Sync,
+        T: Clone + Hash + PartialEq + Eq + Send + Sync,
+        F: FnMut(&S) -> T,
+    >(
         this: &Self::Variant<S>,
         f: F,
     ) -> Self::Variant<T>;
 }
 
-#[derive(Clone, Hash)]
-pub enum Term<L: Language, S: Hash + Clone> {
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum Term<L: Language, S: Clone + Hash + PartialEq + Eq + Send + Sync> {
     Term(L::Variant<S>),
     Var(usize),
 }
 
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Normal<L: Language>(Box<[Term<L, ()>]>);
 
 impl<L: Language> Display for Normal<L>
@@ -82,6 +92,10 @@ impl<L: Language> Normal<L> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn from_arena(arena: &Arena<L>, idx: usize) -> Self {
         let mut v = Vec::new();
         fn inner<L: Language>(v: &mut Vec<Term<L, ()>>, arena: &Arena<L>, idx: usize) {
@@ -101,36 +115,50 @@ impl<L: Language> Normal<L> {
         result
     }
 
+    // recursively writes `val` into `arena`, adding `offset` to each index
+    // returns the number of `Term`s written
+    fn write_with_offset(
+        val: &[Term<L, ()>],
+        arena: &mut [MaybeUninit<Term<L, usize>>],
+        offset: usize,
+    ) -> usize {
+        match &val[0] {
+            &Term::Var(x) => {
+                arena[0].write(Term::Var(x));
+                return 1;
+            }
+            Term::Term(t) => {
+                let mut index = 1;
+                let t_new = L::map(t, |()| {
+                    let w =
+                        Self::write_with_offset(&val[index..], &mut arena[index..], offset + index);
+                    let last_index = index;
+                    index += w;
+                    offset + last_index
+                });
+                arena[0].write(Term::Term(t_new));
+                return index;
+            }
+        }
+    }
+
+    pub fn write_two_into<'a>(
+        f1: &Self,
+        f2: &Self,
+        arena: &'a mut [MaybeUninit<Term<L, usize>>],
+    ) -> &'a mut [Term<L, usize>] {
+        let written = Self::write_with_offset(&f1.0, arena, 0);
+        let written = Self::write_with_offset(&f2.0, &mut arena[written..], written);
+
+        let (init, _) = arena.split_at_mut(written);
+        unsafe { MaybeUninit::slice_assume_init_mut(init) }
+    }
+
     pub fn write_into<'a>(
         &self,
         arena: &'a mut [MaybeUninit<Term<L, usize>>],
     ) -> &'a mut [Term<L, usize>] {
-        // recursively writes `val` into `arena`, adding `offset` to each index
-        // returns the number of `Term`s written
-        fn inner<L: Language>(
-            val: &[Term<L, ()>],
-            arena: &mut [MaybeUninit<Term<L, usize>>],
-            offset: usize,
-        ) -> usize {
-            match &val[0] {
-                &Term::Var(x) => {
-                    arena[0].write(Term::Var(x));
-                    return 1;
-                }
-                Term::Term(t) => {
-                    let mut index = 1;
-                    let t_new = L::map(t, |()| {
-                        let w = inner(&val[index..], &mut arena[index..], offset + index);
-                        let last_index = index;
-                        index += w;
-                        offset + last_index
-                    });
-                    arena[0].write(Term::Term(t_new));
-                    return index;
-                }
-            }
-        }
-        let written = inner(&self.0, arena, 0);
+        let written = Self::write_with_offset(&self.0, arena, 0);
         let (init, _) = arena.split_at_mut(written);
         unsafe { MaybeUninit::slice_assume_init_mut(init) }
     }
@@ -164,31 +192,25 @@ fn occurs<L: Language>(arena: &Arena<L>, var: usize, term: &Term<L, usize>) -> b
     }
 }
 
-fn unify_many<L: Language>(
-    arena: &mut Arena<L>,
-    mut eqs: Vec<(usize, usize)>,
-) -> Option<Vec<(usize, Term<L, usize>)>> {
-    let mut solution = Vec::new();
+fn unify_many<L: Language>(arena: &mut Arena<L>, mut eqs: Vec<(usize, usize)>) -> bool {
     while let Some((a, b)) = eqs.pop() {
         match (&arena.0[a], &arena.0[b]) {
             (&Term::Var(x), t @ &Term::Var(y)) => {
                 if x != y {
                     let t = t.clone();
                     arena.substitute(x, &t);
-                    solution.push((x, t.clone()));
                 }
             }
             (&Term::Var(x), t @ &Term::Term(_)) | (t @ &Term::Term(_), &Term::Var(x)) => {
                 let t = t.clone();
                 if occurs(arena, x, &t) {
-                    return None;
+                    return false;
                 }
                 arena.substitute(x, &t);
-                solution.push((x, t));
             }
             (Term::Term(t1), Term::Term(t2)) => {
                 if !L::matches(t1, t2) {
-                    return None;
+                    return false;
                 }
                 L::children(t1)
                     .iter()
@@ -199,5 +221,18 @@ fn unify_many<L: Language>(
             }
         }
     }
-    return Some(solution);
+    return true;
+}
+
+pub fn modus_ponens<L: Language>(arena: &mut Arena<L>, p: usize, f: usize) -> Option<usize> {
+    let Term::Term(f1) = &arena.0[f] else {
+        return None;
+    };
+    let &[p1, q] = L::match_implication(&f1)?;
+
+    if !unify_many(arena, vec![(p, p1)]) {
+        return None;
+    } else {
+        return Some(q);
+    }
 }
