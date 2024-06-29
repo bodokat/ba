@@ -1,8 +1,7 @@
-mod langs;
+pub mod langs;
 pub mod language;
 mod mp;
 pub mod parse;
-pub use mp::modus_ponens;
 
 use std::{
     fmt::{Debug, Display},

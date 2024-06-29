@@ -1,11 +1,8 @@
-use std::{collections::HashMap, fmt::Display, mem::MaybeUninit, str::FromStr, sync::mpsc, thread};
+use std::{collections::HashMap, fmt::Display, sync::mpsc, thread};
 
 use rayon::prelude::*;
 
-use crate::formula::{
-    language::{modus_ponens, Language, Normal},
-    Entry, Formula, Normalized,
-};
+use crate::formula::language::{modus_ponens, Language, Normal};
 
 pub static AXIOMS: &[&str] = &[
     "1 -> (2 -> 1)",
@@ -16,6 +13,7 @@ pub static AXIOMS: &[&str] = &[
     "1 -> --1",
 ];
 
+#[derive(Debug)]
 pub struct Context<L: Language> {
     entries: HashMap<Normal<L>, Meta>,
     pub new_entries: HashMap<Normal<L>, Meta>,
@@ -23,13 +21,13 @@ pub struct Context<L: Language> {
     max_size: usize,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub struct Meta {
     pub index: usize,
     pub source: Source,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub enum Source {
     Axiom,
     MP(usize, usize),
@@ -72,7 +70,7 @@ impl Display for Source {
 // }
 
 impl<L: Language> Context<L> {
-    fn new(axioms: Vec<Normal<L>>) -> Self {
+    pub fn new(axioms: Vec<Normal<L>>) -> Self {
         let new_entries = axioms
             .into_iter()
             .enumerate()
@@ -121,7 +119,6 @@ impl<L: Language> Context<L> {
         fn try_mp_all<'a, L: Language>(
             a: &'a (impl IntoParallelRefIterator<'a, Item = (&'a Normal<L>, &'a Meta)> + Send + Sync),
             b: &'a (impl IntoParallelRefIterator<'a, Item = (&'a Normal<L>, &'a Meta)> + Send + Sync),
-            slices: impl Iterator<Item = &'a mut [MaybeUninit<Entry>]>,
             chan: &mpsc::Sender<(Normal<L>, Source)>,
         ) {
             a.par_iter().for_each(|(f1, m1): (&Normal<L>, &Meta)| {
@@ -132,11 +129,6 @@ impl<L: Language> Context<L> {
                 })
             })
         }
-
-        let mut array =
-            uninit_slice(2 * self.max_size * (self.entries.len() + self.new_entries.len()));
-
-        let slices = array.chunks_exact_mut(2 * self.max_size);
 
         let mut next_idx = self.next_idx;
 
@@ -174,9 +166,9 @@ impl<L: Language> Context<L> {
     }
 }
 
-fn uninit_slice<L: Language>(n: usize) -> Box<[MaybeUninit<Entry>]> {
-    std::iter::repeat_with(MaybeUninit::uninit)
-        .take(n)
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
-}
+// fn uninit_slice<L: Language>(n: usize) -> Box<[MaybeUninit<Entry>]> {
+//     std::iter::repeat_with(MaybeUninit::uninit)
+//         .take(n)
+//         .collect::<Vec<_>>()
+//         .into_boxed_slice()
+// }
