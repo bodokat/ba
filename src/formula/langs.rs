@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{fmt::Display, hash::Hash, mem};
 
 use super::language::{Language, Normal, Simple, Term};
