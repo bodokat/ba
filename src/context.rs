@@ -57,8 +57,6 @@ impl<L: Language> Context<L> {
     }
 
     pub fn step(&mut self) {
-        let (tx, rx) = mpsc::channel();
-
         fn try_mp_all<'a, L: Language>(
             a: &'a (impl IntoParallelRefIterator<'a, Item = (&'a Normal<L>, &'a Meta)> + Send + Sync),
             b: &'a (impl IntoParallelRefIterator<'a, Item = (&'a Normal<L>, &'a Meta)> + Send + Sync),
@@ -69,9 +67,11 @@ impl<L: Language> Context<L> {
                     if let Some(res) = modus_ponens(f1, f2) {
                         chan.send((res, Source::MP(m1.index, m2.index))).unwrap();
                     }
-                })
-            })
+                });
+            });
         }
+
+        let (tx, rx) = mpsc::channel();
 
         let mut next_idx = self.next_idx;
 

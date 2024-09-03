@@ -1,4 +1,5 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::question_mark, clippy::comparison_chain)]
 
 use std::{io::Write, str::FromStr};
 
@@ -18,7 +19,7 @@ fn main() {
 
     for run in 0..runs {
         writeln!(file, "added in run {run}:").unwrap();
-        for (_, (formula, meta)) in context.new_entries.iter().enumerate() {
+        for (formula, meta) in &context.new_entries {
             writeln!(
                 file,
                 "{i}: {formula} [{source}]",

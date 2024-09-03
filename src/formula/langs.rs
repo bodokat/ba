@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, clippy::enum_glob_use)]
 use std::{fmt::Display, hash::Hash, mem};
 
 use super::language::{Language, Normal, Simple, Term};

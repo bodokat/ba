@@ -53,7 +53,7 @@ where
                 Term::Term(t) => {
                     write!(f, "({t} ")?;
                     let mut idx = 1;
-                    for () in L::children(&t) {
+                    for () in L::children(t) {
                         idx += inner(&val[idx..], f)?;
                         write!(f, " ")?;
                     }
@@ -73,7 +73,7 @@ impl<L: Language> Normal<L> {
         for i in 0..self.0.len() {
             if let Term::Var(new_var) = self.0[i] {
                 if current_var < new_var {
-                    for elem in self.0[i..].iter_mut() {
+                    for elem in &mut self.0[i..] {
                         if let Term::Var(x) = elem {
                             if *x == current_var {
                                 *x = new_var;
@@ -95,18 +95,18 @@ impl<L: Language> Normal<L> {
     }
 
     pub fn from_arena(arena: &Arena<L>, idx: usize) -> Self {
-        let mut v = Vec::new();
         fn inner<L: Language>(v: &mut Vec<Term<L, ()>>, arena: &Arena<L>, idx: usize) {
             match &arena.0[idx] {
                 &Term::Var(x) => v.push(Term::Var(x)),
                 Term::Term(t) => {
-                    v.push(Term::Term(L::map(&t, |_: &usize| ())));
-                    for &c in L::children(&t) {
+                    v.push(Term::Term(L::map(t, |_: &usize| ())));
+                    for &c in L::children(t) {
                         inner(v, arena, c);
                     }
                 }
             }
         }
+        let mut v = Vec::new();
         inner(&mut v, arena, idx);
         let mut result = Self(v.into());
         result.normalize_vars();
@@ -124,7 +124,7 @@ impl<L: Language> Normal<L> {
         match &val[0] {
             &Term::Var(x) => {
                 arena.push(Term::Var(x + var_increment));
-                return 1;
+                1
             }
             Term::Term(t) => {
                 let mut index = 1;
@@ -142,7 +142,7 @@ impl<L: Language> Normal<L> {
                     offset + last_index
                 });
                 arena[t_idx] = Term::Term(t_new);
-                return index;
+                index
             }
         }
     }
@@ -177,33 +177,6 @@ impl<L: Language> Normal<L> {
     // }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::formula::{langs, language::Arena};
-
-    use super::{Language, Normal};
-
-    fn test_conversion<L: Language>(f: &Normal<L>) {
-        let mut arena = Vec::new();
-        let idx = f.write_into(&mut arena, 0);
-        let arena = Arena(arena.into());
-        let res = Normal::from_arena(&arena, idx);
-        assert_eq!(f, &res);
-    }
-
-    #[test]
-    fn test1() {
-        for f in langs::ImpNeg::frege_axioms() {
-            test_conversion(&f);
-        }
-    }
-
-    #[test]
-    fn test2() {
-        test_conversion(&langs::ImpNeg::lukasiewicz_tarski()[0]);
-    }
-}
-
 impl<L: Language, const N: usize> From<[Term<L, ()>; N]> for Normal<L> {
     fn from(value: [Term<L, ()>; N]) -> Self {
         Self(Box::new(value))
@@ -219,7 +192,7 @@ impl<L: Language> Arena<L> {
                 *t = term.clone();
             }
             _ => {}
-        })
+        });
     }
 }
 
@@ -257,20 +230,20 @@ fn unify_many<L: Language>(arena: &mut Arena<L>, mut eqs: Vec<(usize, usize)>) -
                     .zip(L::children(t2))
                     .for_each(|(&a, &b)| {
                         eqs.push((a, b));
-                    })
+                    });
             }
         }
     }
-    return true;
+    true
 }
 
 pub fn modus_ponens<L: Language>(p: &Normal<L>, f: &Normal<L>) -> Option<Normal<L>> {
     let Term::Term(t) = &f.0[0] else {
         return None;
     };
-    let Some(_) = L::match_implication(t) else {
-        return None;
-    };
+    if L::match_implication(t).is_none() {
+        return None
+    }
 
     let mut arena = Vec::with_capacity(p.len() + f.len());
 
@@ -294,9 +267,36 @@ pub fn modus_ponens<L: Language>(p: &Normal<L>, f: &Normal<L>) -> Option<Normal<
 
     let mut arena = Arena(arena.into());
 
-    if !unify_many(&mut arena, vec![(p, p1)]) {
-        return None;
+    if unify_many(&mut arena, vec![(p, p1)]) {
+        Some(Normal::<L>::from_arena(&arena, q))
     } else {
-        return Some(Normal::<L>::from_arena(&arena, q));
+        None
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::formula::{langs, language::Arena};
+
+    use super::{Language, Normal};
+
+    fn test_conversion<L: Language>(f: &Normal<L>) {
+        let mut arena = Vec::new();
+        let idx = f.write_into(&mut arena, 0);
+        let arena = Arena(arena.into());
+        let res = Normal::from_arena(&arena, idx);
+        assert_eq!(f, &res);
+    }
+
+    #[test]
+    fn test1() {
+        for f in langs::ImpNeg::frege_axioms() {
+            test_conversion(&f);
+        }
+    }
+
+    #[test]
+    fn test2() {
+        test_conversion(&langs::ImpNeg::lukasiewicz_tarski()[0]);
     }
 }
