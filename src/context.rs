@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, sync::mpsc, thread};
+use std::{collections::HashMap, fmt::Display, sync::atomic::AtomicUsize};
 
 use rayon::prelude::*;
 
@@ -8,7 +8,7 @@ use crate::formula::language::{modus_ponens, Language, Normal};
 pub struct Context<L: Language> {
     entries: HashMap<Normal<L>, Meta>,
     pub new_entries: HashMap<Normal<L>, Meta>,
-    next_idx: usize,
+    next_idx: AtomicUsize,
 }
 
 #[derive(PartialEq, Eq, Hash, Debug)]
@@ -33,13 +33,13 @@ impl Display for Source {
 }
 
 impl<L: Language> Context<L> {
-    pub fn new(axioms: Vec<Normal<L>>) -> Self {
+    pub fn new(axioms: &[Normal<L>]) -> Self {
         let new_entries = axioms
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(index, f)| {
                 (
-                    f,
+                    f.clone(),
                     Meta {
                         index,
                         source: Source::Axiom,
@@ -52,58 +52,44 @@ impl<L: Language> Context<L> {
         Self {
             entries: HashMap::new(),
             new_entries,
-            next_idx,
+            next_idx: AtomicUsize::new(next_idx),
         }
     }
 
     pub fn step(&mut self) {
-        fn try_mp_all<'a, L: Language>(
-            a: &'a (impl IntoParallelRefIterator<'a, Item = (&'a Normal<L>, &'a Meta)> + Send + Sync),
-            b: &'a (impl IntoParallelRefIterator<'a, Item = (&'a Normal<L>, &'a Meta)> + Send + Sync),
-            chan: &mpsc::Sender<(Normal<L>, Source)>,
-        ) {
-            a.par_iter().for_each(|(f1, m1): (&Normal<L>, &Meta)| {
-                b.par_iter().for_each(|(f2, m2): (&Normal<L>, &Meta)| {
-                    if let Some(res) = modus_ponens(f1, f2) {
-                        chan.send((res, Source::MP(m1.index, m2.index))).unwrap();
-                    }
-                });
-            });
-        }
-
-        let (tx, rx) = mpsc::channel();
-
-        let mut next_idx = self.next_idx;
-
-        let t = thread::spawn(move || {
-            let mut new_entries = HashMap::new();
-
-            for (f, source) in rx {
-                new_entries.entry(f).or_insert_with(|| Meta {
-                    index: next_idx,
-                    source,
-                });
-                next_idx += 1;
-            }
-
-            (new_entries, next_idx)
-        });
-
-        rayon::join(
-            || {
-                rayon::join(
-                    || try_mp_all(&self.entries, &self.new_entries, &tx),
-                    || try_mp_all(&self.new_entries, &self.entries, &tx),
+        let new_entries = self
+            .entries
+            .par_iter()
+            .flat_map(|(f1, m1)| {
+                self.entries.par_iter().filter_map(|(f2, m2)| {
+                    modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
+                })
+            })
+            .chain(self.entries.par_iter().flat_map(|(f1, m1)| {
+                self.new_entries.par_iter().filter_map(|(f2, m2)| {
+                    modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
+                })
+            }))
+            .chain(self.new_entries.par_iter().flat_map(|(f1, m1)| {
+                self.entries.par_iter().filter_map(|(f2, m2)| {
+                    modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
+                })
+            }))
+            .filter(|(f, _)| !self.entries.contains_key(f) && !self.new_entries.contains_key(f))
+            .map(|(f, source)| {
+                (
+                    f,
+                    Meta {
+                        source,
+                        index: self
+                            .next_idx
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                    },
                 )
-            },
-            || try_mp_all(&self.new_entries, &self.new_entries, &tx),
-        );
-        drop(tx);
+            })
+            .collect::<HashMap<_, _>>();
 
-        let (new_entries, next_idx) = t.join().unwrap();
-
-        self.entries.extend(self.new_entries.drain());
-        self.next_idx = next_idx;
+        self.entries.par_extend(self.new_entries.par_drain());
 
         self.new_entries = new_entries;
     }
