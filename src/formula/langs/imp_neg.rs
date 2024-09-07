@@ -1,19 +1,18 @@
 #![allow(dead_code, clippy::enum_glob_use)]
 use std::{fmt::Display, hash::Hash, mem};
 
-use super::language::{Language, Normal, Simple, Term};
+use crate::formula::language::{Language, Normal, Simple, Term};
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
-pub enum ImpNegEnum<S> {
+pub enum Variants<S> {
     Implication([S; 2]),
     Negation([S; 1]),
 }
 
-#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub struct ImpNeg;
 
 impl Language for ImpNeg {
-    type Variant<S> = ImpNegEnum<S>
+    type Variant<S> = Variants<S>
         where S: Simple;
 
     fn matches<S: Simple>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool {
@@ -22,15 +21,15 @@ impl Language for ImpNeg {
 
     fn children<S: Simple>(this: &Self::Variant<S>) -> &[S] {
         match this {
-            ImpNegEnum::Implication(x) => x,
-            ImpNegEnum::Negation(x) => x,
+            Variants::Implication(x) => x,
+            Variants::Negation(x) => x,
         }
     }
 
     fn match_implication<S: Simple>(this: &Self::Variant<S>) -> Option<&[S; 2]> {
         match this {
-            ImpNegEnum::Implication(x) => Some(x),
-            ImpNegEnum::Negation(_) => None,
+            Variants::Implication(x) => Some(x),
+            Variants::Negation(_) => None,
         }
     }
 
@@ -39,25 +38,25 @@ impl Language for ImpNeg {
         mut f: F,
     ) -> Self::Variant<T> {
         match this {
-            ImpNegEnum::Implication([a, b]) => ImpNegEnum::Implication([f(a), f(b)]),
-            ImpNegEnum::Negation([a]) => ImpNegEnum::Negation([f(a)]),
+            Variants::Implication([a, b]) => Variants::Implication([f(a), f(b)]),
+            Variants::Negation([a]) => Variants::Negation([f(a)]),
         }
     }
 }
 
-impl Display for ImpNegEnum<()> {
+impl Display for Variants<()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ImpNegEnum::Implication(_) => write!(f, "->"),
-            ImpNegEnum::Negation(_) => write!(f, "~"),
+            Variants::Implication(_) => write!(f, "->"),
+            Variants::Negation(_) => write!(f, "~"),
         }
     }
 }
 
 impl ImpNeg {
-    pub fn frege_axioms() -> Vec<Normal<ImpNeg>> {
-        use ImpNegEnum::*;
+    pub fn frege_axioms() -> Box<[Normal<ImpNeg>]> {
         use Term::Var as V;
+        use Variants::*;
         fn i() -> Term<ImpNeg, ()> {
             Term::Term(Implication([(), ()]))
         }
@@ -97,8 +96,8 @@ impl ImpNeg {
     }
 
     pub fn lukasiewicz_tarski() -> Vec<Normal<ImpNeg>> {
-        use ImpNegEnum::*;
         use Term::Var as V;
+        use Variants::*;
         fn i() -> Term<ImpNeg, ()> {
             Term::Term(Implication([(), ()]))
         }
@@ -167,8 +166,8 @@ impl ImpNeg {
     }
 
     pub fn meredith() -> Vec<Normal<ImpNeg>> {
-        use ImpNegEnum::*;
         use Term::Var as V;
+        use Variants::*;
         fn i() -> Term<ImpNeg, ()> {
             Term::Term(Implication([(), ()]))
         }
