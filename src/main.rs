@@ -10,7 +10,7 @@ use formula::langs;
 use context::Context;
 
 fn main() {
-    let mut context = Context::new(langs::ImpNeg::meredith());
+    let mut context = Context::new(&langs::ImpNeg::meredith());
     let runs: u64 = std::env::args()
         .nth(1)
         .and_then(|runs| u64::from_str(&runs).ok())
@@ -18,7 +18,10 @@ fn main() {
     let mut file = std::fs::File::create("outputs/meredith.txt").unwrap();
 
     for run in 0..runs {
-        writeln!(file, "added in run {run}:").unwrap();
+        context.step();
+
+        let num_entries = context.new_entries.len();
+        writeln!(file, "added in run {run}: {num_entries} new entries").unwrap();
         for (formula, meta) in &context.new_entries {
             writeln!(
                 file,
@@ -31,8 +34,6 @@ fn main() {
         }
         writeln!(file).unwrap();
 
-        println!("run {run}");
-
-        context.step();
+        println!("run {run}, {num_entries} new");
     }
 }
