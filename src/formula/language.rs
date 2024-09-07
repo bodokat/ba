@@ -7,7 +7,7 @@ pub trait Simple: Clone + Hash + PartialEq + Eq + Send + Sync + Debug {}
 
 impl<T> Simple for T where T: Clone + Hash + PartialEq + Eq + Send + Sync + Debug {}
 
-pub trait Language: Simple + 'static {
+pub trait Language: 'static {
     type Variant<S>: Simple
     where
         S: Simple;
@@ -24,14 +24,78 @@ pub trait Language: Simple + 'static {
     ) -> Self::Variant<T>;
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub enum Term<L: Language, S: Simple> {
     Term(L::Variant<S>),
     Var(usize),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+impl<L: Language, S: Simple> Debug for Term<L, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Term(arg0) => f.debug_tuple("Term").field(arg0).finish(),
+            Self::Var(arg0) => f.debug_tuple("Var").field(arg0).finish(),
+        }
+    }
+}
+
+impl<L: Language, S: Simple> Eq for Term<L, S> {}
+
+impl<L: Language, S: Simple> Clone for Term<L, S> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Term(x) => Self::Term(x.clone()),
+            Self::Var(x) => Self::Var(*x),
+        }
+    }
+}
+
+impl<L: Language, S: Simple> Hash for Term<L, S> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Term::Term(x) => x.hash(state),
+            Term::Var(x) => x.hash(state),
+        }
+    }
+}
+
+impl<L: Language, S: Simple> PartialEq for Term<L, S> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Term(l0), Self::Term(r0)) => l0 == r0,
+            (Self::Var(l0), Self::Var(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
 pub struct Normal<L: Language>(Box<[Term<L, ()>]>);
+
+impl<L: Language> Debug for Normal<L> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Normal").field(&self.0).finish()
+    }
+}
+
+impl<L: Language> Hash for Normal<L> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl<L: Language> Eq for Normal<L> {}
+
+impl<L: Language> PartialEq for Normal<L> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<L: Language> Clone for Normal<L> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 impl<L: Language> Display for Normal<L>
 where
@@ -242,7 +306,7 @@ pub fn modus_ponens<L: Language>(p: &Normal<L>, f: &Normal<L>) -> Option<Normal<
         return None;
     };
     if L::match_implication(t).is_none() {
-        return None
+        return None;
     }
 
     let mut arena = Vec::with_capacity(p.len() + f.len());
