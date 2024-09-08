@@ -1,13 +1,14 @@
 use std::{collections::HashMap, fmt::Display, sync::atomic::AtomicUsize};
 
+use ahash::RandomState;
 use rayon::prelude::*;
 
 use crate::formula::language::{modus_ponens, Language, Normal};
 
 #[derive(Debug)]
 pub struct Context<L: Language> {
-    entries: HashMap<Normal<L>, Meta>,
-    pub new_entries: HashMap<Normal<L>, Meta>,
+    old_entries: HashMap<Normal<L>, Meta, RandomState>,
+    pub new_entries: HashMap<Normal<L>, Meta, RandomState>,
     next_idx: AtomicUsize,
 }
 
@@ -46,11 +47,11 @@ impl<L: Language> Context<L> {
                     },
                 )
             })
-            .collect::<HashMap<_, _>>();
+            .collect::<HashMap<_, _, _>>();
 
         let next_idx = new_entries.len();
         Self {
-            entries: HashMap::new(),
+            old_entries: HashMap::default(),
             new_entries,
             next_idx: AtomicUsize::new(next_idx),
         }
@@ -58,24 +59,24 @@ impl<L: Language> Context<L> {
 
     pub fn step(&mut self) {
         let new_entries = self
-            .entries
+            .new_entries
             .par_iter()
-            .flat_map(|(f1, m1)| {
-                self.entries.par_iter().filter_map(|(f2, m2)| {
+            .flat_map_iter(|(f1, m1)| {
+                self.new_entries.iter().filter_map(|(f2, m2)| {
                     modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
                 })
             })
-            .chain(self.entries.par_iter().flat_map(|(f1, m1)| {
-                self.new_entries.par_iter().filter_map(|(f2, m2)| {
+            .chain(self.new_entries.par_iter().flat_map_iter(|(f1, m1)| {
+                self.old_entries.iter().filter_map(|(f2, m2)| {
                     modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
                 })
             }))
-            .chain(self.new_entries.par_iter().flat_map(|(f1, m1)| {
-                self.entries.par_iter().filter_map(|(f2, m2)| {
+            .chain(self.new_entries.par_iter().flat_map_iter(|(f2, m2)| {
+                self.old_entries.iter().filter_map(|(f1, m1)| {
                     modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
                 })
             }))
-            .filter(|(f, _)| !self.entries.contains_key(f) && !self.new_entries.contains_key(f))
+            .filter(|(f, _)| !self.old_entries.contains_key(f) && !self.new_entries.contains_key(f))
             .map(|(f, source)| {
                 (
                     f,
@@ -87,9 +88,9 @@ impl<L: Language> Context<L> {
                     },
                 )
             })
-            .collect::<HashMap<_, _>>();
+            .collect::<HashMap<_, _, _>>();
 
-        self.entries.par_extend(self.new_entries.par_drain());
+        self.old_entries.par_extend(self.new_entries.par_drain());
 
         self.new_entries = new_entries;
     }
