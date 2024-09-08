@@ -1,3 +1,7 @@
 /target
 /outputs
 output.txt
+flamegraph.svg
+perf.data*
+profile.coz
+gecko_profile.json
