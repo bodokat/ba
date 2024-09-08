@@ -47,44 +47,38 @@ impl Language for ImpFalse {
 impl Display for Variants<()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Variants::Implication(_) => write!(f, "->"),
-            Variants::False => write!(f, "!"),
+            Variants::Implication(_) => write!(f, "C"),
+            Variants::False => write!(f, "F"),
+        }
+    }
+}
+
+impl TryFrom<char> for Variants<()> {
+    type Error = ();
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            'C' => Ok(Variants::Implication([(), ()])),
+            'F' => Ok(Variants::False),
+            _ => Err(()),
         }
     }
 }
 
 impl ImpFalse {
     pub fn church() -> Box<[Normal<ImpFalse>]> {
-        use Term::Var as V;
-        fn i() -> Term<ImpFalse, ()> {
-            Term::Term(Variants::Implication([(), ()]))
-        }
-        fn f() -> Term<ImpFalse, ()> {
-            Term::Term(Variants::False)
-        }
         [
-            // 0 -> (1 -> 0)
-            [i(), V(0), i(), V(1), V(0)].into(),
-            // (0 -> (1 -> 2)) -> ((0 -> 1) -> (0 -> 2))
-            [
-                i(),
-                i(),
-                V(0),
-                i(),
-                V(1),
-                V(2),
-                i(),
-                i(),
-                V(0),
-                V(1),
-                i(),
-                V(0),
-                V(2),
-            ]
-            .into(),
-            // ((0 -> F) -> F) -> 0
-            [i(), i(), i(), V(0), f(), f(), V(0)].into(),
+            // a -> (b -> a)
+            "CaCba".parse().unwrap(),
+            // (a -> (b -> c)) -> ((a -> b) -> (a -> c))
+            "CCaCbcCCabCac".parse().unwrap(),
+            // ((a -> F) -> F) -> a
+            "CCCaFFa".parse().unwrap(),
         ]
         .into()
+    }
+
+    pub fn meredith1() -> Box<[Normal<ImpFalse>]> {
+        ["CCCCCabCcFdeCCeaCca".parse().unwrap()].into()
     }
 }

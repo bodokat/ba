@@ -47,157 +47,52 @@ impl Language for ImpNeg {
 impl Display for Variants<()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Variants::Implication(_) => write!(f, "->"),
-            Variants::Negation(_) => write!(f, "~"),
+            Variants::Implication(_) => write!(f, "C"),
+            Variants::Negation(_) => write!(f, "N"),
+        }
+    }
+}
+
+impl TryFrom<char> for Variants<()> {
+    type Error = ();
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            'C' => Ok(Variants::Implication([(), ()])),
+            'F' => Ok(Variants::Negation([()])),
+            _ => Err(()),
         }
     }
 }
 
 impl ImpNeg {
     pub fn frege_axioms() -> Box<[Normal<ImpNeg>]> {
-        use Term::Var as V;
-        use Variants::*;
-        fn i() -> Term<ImpNeg, ()> {
-            Term::Term(Implication([(), ()]))
-        }
-        fn n() -> Term<ImpNeg, ()> {
-            Term::Term(Negation([()]))
-        }
         [
-            // 0 -> (1 -> 0)
-            [i(), V(0), i(), V(1), V(0)].into(),
-            // (0 -> (1 -> 2)) -> ((0 -> 1) -> (0 -> 2))
-            [
-                i(),
-                i(),
-                V(0),
-                i(),
-                V(1),
-                V(2),
-                i(),
-                i(),
-                V(0),
-                V(1),
-                i(),
-                V(0),
-                V(2),
-            ]
-            .into(),
-            // (0 -> (1 -> 2)) -> (1 -> (0 -> 2))
-            [i(), i(), V(0), i(), V(1), V(2), i(), V(1), i(), V(0), V(2)].into(),
-            // (0 -> 1) -> (-1 -> -0)
-            [i(), i(), V(0), V(1), i(), n(), V(1), n(), V(0)].into(),
-            // (--0 -> 0)
-            [i(), n(), n(), V(0), V(0)].into(),
-            // (0 -> --0)
-            [i(), V(0), n(), n(), V(0)].into(),
+            // a -> (b -> a)
+            "CaCba".parse().unwrap(),
+            // (a -> (b -> c)) -> ((a -> b) -> (a -> c))
+            "CCaCbcCCabCac".parse().unwrap(),
+            // (a -> (b -> c)) -> (b -> (a -> c))
+            "CCaCbcCbCac".parse().unwrap(),
+            // (a -> b) -> (-b -> -a)
+            "CCabCNbNa".parse().unwrap(),
+            // (--a -> a)
+            "CNNaa".parse().unwrap(),
+            // (a -> --a)
+            "CaNNa".parse().unwrap(),
         ]
         .into()
     }
 
     pub fn lukasiewicz_tarski() -> Vec<Normal<ImpNeg>> {
-        use Term::Var as V;
-        use Variants::*;
-        fn i() -> Term<ImpNeg, ()> {
-            Term::Term(Implication([(), ()]))
-        }
-        fn n() -> Term<ImpNeg, ()> {
-            Term::Term(Negation([()]))
-        }
         [
-            /*
-               (
-                   (0 -> (1 -> 0))
-                   ->
-                   (
-                       (
-                           (-2 -> (3 -> -4))
-                           ->
-                           (
-                               (2 -> (3 -> 5))
-                               ->
-                               ((4 -> 3) -> (4 -> 5)))
-                           )
-                       ->
-                       6
-                       )
-                   )
-               ->
-               (7 -> 6)
-            */
-            [
-                i(),
-                i(),
-                i(),
-                V(0),
-                i(),
-                V(1),
-                V(0),
-                i(),
-                i(),
-                i(),
-                n(),
-                V(2),
-                i(),
-                V(3),
-                n(),
-                V(4),
-                i(),
-                i(),
-                V(2),
-                i(),
-                V(3),
-                V(5),
-                i(),
-                i(),
-                V(4),
-                V(3),
-                i(),
-                V(4),
-                V(5),
-                V(6),
-                i(),
-                V(7),
-                V(6),
-            ]
-            .into(),
+            // [(a -> (b -> a)) -> ([(-c -> (d -> -e)) -> [(c -> (d -> f)) -> ((e -> d) -> (e -> f))]] -> g)] -> (h -> g)
+            "CCCaCbaCCCNcCdNeCCcCdfCCedCefgChg".parse().unwrap(),
         ]
         .into()
     }
 
     pub fn meredith() -> Vec<Normal<ImpNeg>> {
-        use Term::Var as V;
-        use Variants::*;
-        fn i() -> Term<ImpNeg, ()> {
-            Term::Term(Implication([(), ()]))
-        }
-        fn n() -> Term<ImpNeg, ()> {
-            Term::Term(Negation([()]))
-        }
-        [[
-            i(),
-            i(),
-            i(),
-            i(),
-            i(),
-            V(0),
-            V(1),
-            i(),
-            n(),
-            V(2),
-            n(),
-            V(3),
-            V(2),
-            V(4),
-            i(),
-            i(),
-            V(4),
-            V(0),
-            i(),
-            V(3),
-            V(0),
-        ]
-        .into()]
-        .into()
+        ["CCCCCabCNcNdceCCeaCda".parse().unwrap()].into()
     }
 }

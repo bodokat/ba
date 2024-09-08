@@ -1,6 +1,8 @@
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display},
     hash::Hash,
+    str::FromStr,
 };
 
 pub trait Simple: Clone + Hash + PartialEq + Eq + Send + Sync + Debug {}
@@ -102,38 +104,63 @@ where
     L::Variant<()>: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn inner<L: Language>(
-            val: &[Term<L, ()>],
-            f: &mut std::fmt::Formatter<'_>,
-        ) -> Result<usize, std::fmt::Error>
-        where
-            L::Variant<()>: Display,
-        {
-            match &val[0] {
-                &Term::Var(x) => {
-                    write!(f, "{x}")?;
-                    Ok(1)
-                }
-                Term::Term(t) => {
-                    write!(f, "({t} ")?;
-                    let mut idx = 1;
-                    for () in L::children(t) {
-                        idx += inner(&val[idx..], f)?;
-                        write!(f, " ")?;
-                    }
-                    write!(f, ")")?;
-                    Ok(idx)
-                }
+        for t in &self.0 {
+            match t {
+                Term::Term(v) => write!(f, "{v}")?,
+                Term::Var(x) => write!(f, "{x}")?,
             }
         }
-        inner(&self.0, f)?;
         Ok(())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum ParseError {
+    WrongArguments(isize),
+}
+
+impl<L: Language> FromStr for Normal<L>
+where
+    L::Variant<()>: TryFrom<char>,
+{
+    type Err = ParseError;
+
+    #[allow(clippy::cast_possible_wrap)]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut num_left: isize = 1;
+        let mut next_var = 0;
+        let mut vars_map = HashMap::new();
+        let f: Normal<_> = s
+            .chars()
+            .map(|c| {
+                num_left -= 1;
+                if let Ok(v) = c.try_into() {
+                    num_left += L::children(&v).len() as isize;
+                    Term::Term(v)
+                } else {
+                    let e = vars_map.entry(c);
+                    let n = e.or_insert_with(|| {
+                        let n = next_var;
+                        next_var += 1;
+                        n
+                    });
+                    Term::Var(*n)
+                }
+            })
+            .collect::<Box<[_]>>()
+            .into();
+        if num_left == 0 {
+            Ok(f)
+        } else {
+            Err(ParseError::WrongArguments(num_left))
+        }
     }
 }
 
 impl<L: Language> Normal<L> {
     fn normalize_vars(&mut self) {
-        let mut current_var = 1;
+        let mut current_var = 0;
         for i in 0..self.0.len() {
             if let Term::Var(new_var) = self.0[i] {
                 if current_var < new_var {
@@ -244,6 +271,12 @@ impl<L: Language> Normal<L> {
 impl<L: Language, const N: usize> From<[Term<L, ()>; N]> for Normal<L> {
     fn from(value: [Term<L, ()>; N]) -> Self {
         Self(Box::new(value))
+    }
+}
+
+impl<L: Language> From<Box<[Term<L, ()>]>> for Normal<L> {
+    fn from(value: Box<[Term<L, ()>]>) -> Self {
+        Self(value)
     }
 }
 
