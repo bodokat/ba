@@ -7,8 +7,7 @@ use crate::formula::language::{modus_ponens, Language, Normal};
 
 #[derive(Debug)]
 pub struct Context<L: Language> {
-    old_entries: HashMap<Normal<L>, Meta, RandomState>,
-    pub new_entries: HashMap<Normal<L>, Meta, RandomState>,
+    pub entries: HashMap<Normal<L>, Meta, RandomState>,
     next_idx: AtomicUsize,
 }
 
@@ -35,7 +34,7 @@ impl Display for Source {
 
 impl<L: Language> Context<L> {
     pub fn new(axioms: &[Normal<L>]) -> Self {
-        let new_entries = axioms
+        let entries = axioms
             .iter()
             .enumerate()
             .map(|(index, f)| {
@@ -49,34 +48,23 @@ impl<L: Language> Context<L> {
             })
             .collect::<HashMap<_, _, _>>();
 
-        let next_idx = new_entries.len();
+        let next_idx = entries.len();
         Self {
-            old_entries: HashMap::default(),
-            new_entries,
+            entries,
             next_idx: AtomicUsize::new(next_idx),
         }
     }
 
     pub fn step(&mut self) {
         let new_entries = self
-            .new_entries
+            .entries
             .par_iter()
             .flat_map_iter(|(f1, m1)| {
-                self.new_entries.iter().filter_map(|(f2, m2)| {
+                self.entries.iter().filter_map(|(f2, m2)| {
                     modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
                 })
             })
-            .chain(self.new_entries.par_iter().flat_map_iter(|(f1, m1)| {
-                self.old_entries.iter().filter_map(|(f2, m2)| {
-                    modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
-                })
-            }))
-            .chain(self.new_entries.par_iter().flat_map_iter(|(f2, m2)| {
-                self.old_entries.iter().filter_map(|(f1, m1)| {
-                    modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
-                })
-            }))
-            .filter(|(f, _)| !self.old_entries.contains_key(f) && !self.new_entries.contains_key(f))
+            .filter(|(f, _)| !self.entries.contains_key(f))
             .map(|(f, source)| {
                 (
                     f,
@@ -88,10 +76,9 @@ impl<L: Language> Context<L> {
                     },
                 )
             })
-            .collect::<HashMap<_, _, _>>();
+            .collect_vec_list();
 
-        self.old_entries.par_extend(self.new_entries.par_drain());
-
-        self.new_entries = new_entries;
+        self.entries
+            .par_extend(new_entries.into_par_iter().flatten());
     }
 }
