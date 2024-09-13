@@ -28,7 +28,7 @@ pub trait Language: 'static {
 
 pub enum Term<L: Language, S: Simple> {
     Term(L::Variant<S>),
-    Var(usize),
+    Var(u16),
 }
 
 impl<L: Language, S: Simple> Debug for Term<L, S> {
@@ -190,9 +190,9 @@ impl<L: Language> Normal<L> {
             match &arena.0[idx] {
                 &Term::Var(x) => v.push(Term::Var(x)),
                 Term::Term(t) => {
-                    v.push(Term::Term(L::map(t, |_: &usize| ())));
+                    v.push(Term::Term(L::map(t, |_| ())));
                     for &c in L::children(t) {
-                        inner(v, arena, c);
+                        inner(v, arena, c as usize);
                     }
                 }
             }
@@ -208,22 +208,22 @@ impl<L: Language> Normal<L> {
     // returns the number of `Term`s written
     fn write_with_offset(
         val: &[Term<L, ()>],
-        arena: &mut Vec<Term<L, usize>>,
-        offset: usize,
-        var_increment: usize,
-    ) -> usize {
+        arena: &mut Vec<Term<L, u16>>,
+        offset: u16,
+        var_increment: u16,
+    ) -> u16 {
         match &val[0] {
             &Term::Var(x) => {
                 arena.push(Term::Var(x + var_increment));
                 1
             }
             Term::Term(t) => {
-                let mut index = 1;
+                let mut index = 1u16;
                 let t_idx = arena.len();
                 arena.push(Term::Var(0)); // Sentinel
                 let t_new = L::map(t, |()| {
                     let w = Self::write_with_offset(
-                        &val[index..],
+                        &val[(index as usize)..],
                         arena,
                         offset + index,
                         var_increment,
@@ -238,35 +238,31 @@ impl<L: Language> Normal<L> {
         }
     }
 
-    pub fn write_into(&self, arena: &mut Vec<Term<L, usize>>, var_increment: usize) -> usize {
-        let start = arena.len();
+    pub fn write_into(&self, arena: &mut Vec<Term<L, u16>>, var_increment: u16) -> u16 {
+        let start = u16::try_from(arena.len()).unwrap();
 
         Self::write_with_offset(&self.0, arena, start, var_increment);
 
         start
     }
-
-    // pub fn write_two_into<'a>(
-    //     f1: &Self,
-    //     f2: &Self,
-    //     arena: &'a mut [MaybeUninit<Term<L, usize>>],
-    // ) -> &'a mut [Term<L, usize>] {
-    //     let written = Self::write_with_offset(&f1.0, arena, 0);
-    //     let written = Self::write_with_offset(&f2.0, &mut arena[written..], written);
-
-    //     let (init, _) = arena.split_at_mut(written);
-    //     unsafe { MaybeUninit::slice_assume_init_mut(init) }
-    // }
-
-    // pub fn write_into<'a>(
-    //     &self,
-    //     arena: &'a mut [MaybeUninit<Term<L, usize>>],
-    // ) -> &'a mut [Term<L, usize>] {
-    //     let written = Self::write_with_offset(&self.0, arena, 0);
-    //     let (init, _) = arena.split_at_mut(written);
-    //     unsafe { MaybeUninit::slice_assume_init_mut(init) }
-    // }
 }
+
+// fn slice<L: Language>(formula: &[Term<L, ()>]) -> &[Term<L,()>] {
+//     let mut next_var = 0;
+//     let mut remaining = &[];
+//     for index in (0..(formula.len() / 2)).map(|x| 2 * x) {
+//         match (formula[index], formula[index + 1]) {
+//             (Term::Term(t), Term::Var(v))
+//                 if L::match_implication(&t).is_some() && v == next_var =>
+//             {
+//                 next_var += 1;
+//             }
+//             _ => remaining = formula.split_at(index * 2),
+//         }
+//     }
+
+//     unreachable!("not a well-formed term")
+// }
 
 impl<L: Language, const N: usize> From<[Term<L, ()>; N]> for Normal<L> {
     fn from(value: [Term<L, ()>; N]) -> Self {
@@ -280,10 +276,10 @@ impl<L: Language> From<Box<[Term<L, ()>]>> for Normal<L> {
     }
 }
 
-pub struct Arena<L: Language>(Box<[Term<L, usize>]>);
+pub struct Arena<L: Language>(Box<[Term<L, u16>]>);
 
 impl<L: Language> Arena<L> {
-    fn substitute(&mut self, var: usize, term: &Term<L, usize>) {
+    fn substitute(&mut self, var: u16, term: &Term<L, u16>) {
         self.0.iter_mut().for_each(|t| match *t {
             Term::Var(v) if v == var => {
                 *t = term.clone();
@@ -293,18 +289,18 @@ impl<L: Language> Arena<L> {
     }
 }
 
-fn occurs<L: Language>(arena: &Arena<L>, var: usize, term: &Term<L, usize>) -> bool {
+fn occurs<L: Language>(arena: &Arena<L>, var: u16, term: &Term<L, u16>) -> bool {
     match term {
         Term::Var(x) => *x == var,
         Term::Term(t) => L::children(t)
             .iter()
-            .any(|&idx| occurs(arena, var, &arena.0[idx])),
+            .any(|&idx| occurs(arena, var, &arena.0[idx as usize])),
     }
 }
 
-fn unify_many<L: Language>(arena: &mut Arena<L>, mut eqs: Vec<(usize, usize)>) -> bool {
+fn unify_many<L: Language>(arena: &mut Arena<L>, mut eqs: Vec<(u16, u16)>) -> bool {
     while let Some((a, b)) = eqs.pop() {
-        match (&arena.0[a], &arena.0[b]) {
+        match (&arena.0[a as usize], &arena.0[b as usize]) {
             (&Term::Var(x), t @ &Term::Var(y)) => {
                 if x != y {
                     let t = t.clone();
@@ -355,7 +351,7 @@ pub fn modus_ponens<L: Language>(p: &Normal<L>, f: &Normal<L>) -> Option<Normal<
     let p = p.write_into(&mut arena, 0);
     let f = f.write_into(&mut arena, max_var + 1);
 
-    let Term::Term(t) = &arena[f] else {
+    let Term::Term(t) = &arena[f as usize] else {
         return None;
     };
     let Some(&[p1, q]) = L::match_implication(t) else {
@@ -365,7 +361,7 @@ pub fn modus_ponens<L: Language>(p: &Normal<L>, f: &Normal<L>) -> Option<Normal<
     let mut arena = Arena(arena.into());
 
     if unify_many(&mut arena, vec![(p, p1)]) {
-        Some(Normal::<L>::from_arena(&arena, q))
+        Some(Normal::<L>::from_arena(&arena, q as usize))
     } else {
         None
     }
@@ -381,13 +377,13 @@ mod test {
         let mut arena = Vec::new();
         let idx = f.write_into(&mut arena, 0);
         let arena = Arena(arena.into());
-        let res = Normal::from_arena(&arena, idx);
+        let res = Normal::from_arena(&arena, idx as usize);
         assert_eq!(f, &res);
     }
 
     #[test]
     fn test1() {
-        for f in langs::ImpNeg::frege_axioms() {
+        for f in langs::ImpNeg::frege() {
             test_conversion(&f);
         }
     }

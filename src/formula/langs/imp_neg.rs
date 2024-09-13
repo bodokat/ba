@@ -59,27 +59,40 @@ impl TryFrom<char> for Variants<()> {
     fn try_from(value: char) -> Result<Self, Self::Error> {
         match value {
             'C' => Ok(Variants::Implication([(), ()])),
-            'F' => Ok(Variants::Negation([()])),
+            'N' => Ok(Variants::Negation([()])),
             _ => Err(()),
         }
     }
 }
 
 impl ImpNeg {
-    pub fn frege_axioms() -> Box<[Normal<ImpNeg>]> {
+    pub fn frege() -> Box<[Normal<ImpNeg>]> {
         [
             // a -> (b -> a)
-            "CaCba".parse().unwrap(),
+            "CaCba",
             // (a -> (b -> c)) -> ((a -> b) -> (a -> c))
-            "CCaCbcCCabCac".parse().unwrap(),
+            "CCaCbcCCabCac",
             // (a -> (b -> c)) -> (b -> (a -> c))
-            "CCaCbcCbCac".parse().unwrap(),
+            "CCaCbcCbCac",
             // (a -> b) -> (-b -> -a)
-            "CCabCNbNa".parse().unwrap(),
+            "CCabCNbNa",
             // (--a -> a)
-            "CNNaa".parse().unwrap(),
+            "CNNaa",
             // (a -> --a)
-            "CaNNa".parse().unwrap(),
+            "CaNNa",
+        ]
+        .map(|x| x.parse().unwrap())
+        .into()
+    }
+
+    pub fn lukasiewicz1() -> Vec<Normal<ImpNeg>> {
+        [
+            // (p -> q) -> ((q -> r) -> (p -> r))
+            "CCpqCCqrCpr".parse().unwrap(),
+            // (-p -> p) -> p
+            "CCNppp".parse().unwrap(),
+            // p -> (-p -> q)
+            "CpCNpq".parse().unwrap(),
         ]
         .into()
     }

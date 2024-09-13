@@ -1,19 +1,15 @@
 #![warn(clippy::pedantic, clippy::perf)]
 #![allow(clippy::question_mark, clippy::comparison_chain)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use clap::Parser;
-use std::{io::Write, str::FromStr};
 
 mod context;
 mod formula;
-use formula::{
-    langs::{self, ImpFalse},
-    language::Normal,
-};
+use formula::langs::{self};
 
 use context::Context;
-
-type Lang = ImpFalse;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -31,14 +27,24 @@ fn main() {
 
     let search = args.search.map(|f| f.parse().unwrap());
 
-    dbg!(&search);
-
-    let mut context = Context::new(&langs::ImpFalse::church());
+    let mut context = Context::new(&langs::ImpNeg::lukasiewicz1());
     let runs = args.iterations;
     // let mut file = std::fs::File::create("outputs/imp_false/meredith1.txt").unwrap();
 
     for run in 0..runs {
-        context.step();
+        if let Some(search) = &search {
+            let found = AtomicBool::new(false);
+            context.step(|f1, f2, f| {
+                if f == search {
+                    println!("Found formula ({f}) after {run} iterations");
+                    println!("From MP with ({f1}), ({f2})");
+                    found.store(true, Ordering::Relaxed);
+                }
+            });
+            if found.load(Ordering::Relaxed) {
+                break;
+            }
+        }
 
         let num_entries = context.entries.len();
         // writeln!(file, "added in run {run}: {num_entries} new entries").unwrap();
@@ -54,15 +60,6 @@ fn main() {
         // }
         // writeln!(file).unwrap();
 
-        println!("run {run}, {num_entries} new");
-
-        if let Some(f) = &search {
-            if let Some(found) = context.entries.get(f) {
-                println!("Found formula ({f}) after {run} iterations");
-                return;
-            } else {
-                println!("Formula ({f}) not found in iteration {run}");
-            }
-        }
+        println!("run {run}, {num_entries} found");
     }
 }

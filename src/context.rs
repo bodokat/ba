@@ -1,14 +1,20 @@
-use std::{collections::HashMap, fmt::Display, sync::atomic::AtomicUsize};
+use std::{
+    fmt::Display,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
+use hashbrown::HashSet;
 
 use ahash::RandomState;
 use rayon::prelude::*;
 
 use crate::formula::language::{modus_ponens, Language, Normal};
 
+const MAX_LEN: usize = 32;
+
 #[derive(Debug)]
 pub struct Context<L: Language> {
-    pub entries: HashMap<Normal<L>, Meta, RandomState>,
-    next_idx: AtomicUsize,
+    pub entries: HashSet<Normal<L>, RandomState>,
 }
 
 #[derive(PartialEq, Eq, Hash, Debug)]
@@ -34,50 +40,36 @@ impl Display for Source {
 
 impl<L: Language> Context<L> {
     pub fn new(axioms: &[Normal<L>]) -> Self {
-        let entries = axioms
-            .iter()
-            .enumerate()
-            .map(|(index, f)| {
-                (
-                    f.clone(),
-                    Meta {
-                        index,
-                        source: Source::Axiom,
-                    },
-                )
-            })
-            .collect::<HashMap<_, _, _>>();
+        let entries = axioms.iter().cloned().collect();
 
-        let next_idx = entries.len();
-        Self {
-            entries,
-            next_idx: AtomicUsize::new(next_idx),
-        }
+        Self { entries }
     }
 
-    pub fn step(&mut self) {
+    pub fn step<F: Fn(&Normal<L>, &Normal<L>, &Normal<L>) + Send + Sync>(
+        &mut self,
+        for_each_new: F,
+    ) {
+        let max_len = AtomicUsize::new(0);
         let new_entries = self
             .entries
             .par_iter()
-            .flat_map_iter(|(f1, m1)| {
-                self.entries.iter().filter_map(|(f2, m2)| {
-                    modus_ponens(f1, f2).map(|res| (res, Source::MP(m1.index, m2.index)))
+            .flat_map_iter(|f1| {
+                self.entries.iter().filter_map(|f2| {
+                    modus_ponens(f1, f2)
+                        .inspect(|f| {
+                            max_len.fetch_max(f.len(), Ordering::Relaxed);
+                            for_each_new(f1, f2, f);
+                        })
+                        .filter(|f| f.len() <= MAX_LEN)
                 })
             })
-            .filter(|(f, _)| !self.entries.contains_key(f))
-            .map(|(f, source)| {
-                (
-                    f,
-                    Meta {
-                        source,
-                        index: self
-                            .next_idx
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-                    },
-                )
-            })
+            // .filter(
+            //     #[inline(never)]
+            //     |f| !self.entries.contains(f),
+            // )
             .collect_vec_list();
 
+        println!("max len: {}", max_len.load(Ordering::Relaxed));
         self.entries
             .par_extend(new_entries.into_par_iter().flatten());
     }
