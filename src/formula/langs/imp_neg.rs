@@ -12,8 +12,10 @@ pub enum Variants<S> {
 pub struct ImpNeg;
 
 impl Language for ImpNeg {
-    type Variant<S> = Variants<S>
-        where S: Simple;
+    type Variant<S>
+        = Variants<S>
+    where
+        S: Simple;
 
     fn matches<S: Simple>(this: &Self::Variant<S>, other: &Self::Variant<S>) -> bool {
         mem::discriminant(this) == mem::discriminant(other)
@@ -88,12 +90,50 @@ impl ImpNeg {
     pub fn lukasiewicz1() -> Vec<Normal<ImpNeg>> {
         [
             // (p -> q) -> ((q -> r) -> (p -> r))
-            "CCpqCCqrCpr".parse().unwrap(),
+            "CCpqCCqrCpr",
             // (-p -> p) -> p
-            "CCNppp".parse().unwrap(),
+            "CCNppp",
             // p -> (-p -> q)
-            "CpCNpq".parse().unwrap(),
+            "CpCNpq",
         ]
+        .map(|x| x.parse().unwrap())
+        .into()
+    }
+
+    pub fn lukasiewicz2() -> Vec<Normal<ImpNeg>> {
+        ["CCCpqrCNpr", "CCCpqrCqr", "CCNprCCqrCCpqr"]
+            .map(|x| x.parse().unwrap())
+            .into()
+    }
+
+    pub fn lukasiewicz3() -> Vec<Normal<ImpNeg>> {
+        ["CpCqp", "CCpCqrCCpqCpr", "CCNpNqCqp"]
+            .map(|x| x.parse().unwrap())
+            .into()
+    }
+
+    pub fn hilbert() -> Vec<Normal<ImpNeg>> {
+        [
+            "CpCqp",
+            "CCpCqrCqCpr",
+            "CCqrCCpqCpr",
+            "CpCNpq",
+            "CCpqCCNpqq",
+        ]
+        .map(|x| x.parse().unwrap())
+        .into()
+    }
+
+    pub fn russell() -> Vec<Normal<ImpNeg>> {
+        [
+            "CpCqp",
+            "CCpqCCqrCpr",
+            "CCpCqrCqCpr",
+            "CNNpp",
+            "CCpNpNp",
+            "CCpNqCqNp",
+        ]
+        .map(|x| x.parse().unwrap())
         .into()
     }
 
