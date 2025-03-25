@@ -68,25 +68,6 @@ impl TryFrom<char> for Variants<()> {
 }
 
 impl ImpNeg {
-    pub fn frege() -> Box<[Normal<ImpNeg>]> {
-        [
-            // a -> (b -> a)
-            "CaCba",
-            // (a -> (b -> c)) -> ((a -> b) -> (a -> c))
-            "CCaCbcCCabCac",
-            // (a -> (b -> c)) -> (b -> (a -> c))
-            "CCaCbcCbCac",
-            // (a -> b) -> (-b -> -a)
-            "CCabCNbNa",
-            // (--a -> a)
-            "CNNaa",
-            // (a -> --a)
-            "CaNNa",
-        ]
-        .map(|x| x.parse().unwrap())
-        .into()
-    }
-
     pub fn lukasiewicz1() -> Vec<Normal<ImpNeg>> {
         [
             // (p -> q) -> ((q -> r) -> (p -> r))
@@ -112,6 +93,24 @@ impl ImpNeg {
             .into()
     }
 
+    pub fn frege() -> Box<[Normal<ImpNeg>]> {
+        [
+            // p -> (q -> p)
+            "CpCqp",
+            // (p -> (q -> r)) -> (q -> (p -> r))
+            "CCpCqrCqCpr",
+            // (p -> (q -> r)) -> ((p -> q) -> (p -> r))
+            "CCpCqrCCpqCpr",
+            // (p -> q) -> (-q -> -p)
+            "CCpqCNqNp",
+            // (--p -> p)
+            "CNNpp",
+            // (p -> --p)
+            "CpNNp",
+        ]
+        .map(|x| x.parse().unwrap())
+        .into()
+    }
     pub fn hilbert() -> Vec<Normal<ImpNeg>> {
         [
             "CpCqp",
@@ -139,13 +138,13 @@ impl ImpNeg {
 
     pub fn lukasiewicz_tarski() -> Vec<Normal<ImpNeg>> {
         [
-            // [(a -> (b -> a)) -> ([(-c -> (d -> -e)) -> [(c -> (d -> f)) -> ((e -> d) -> (e -> f))]] -> g)] -> (h -> g)
-            "CCCaCbaCCCNcCdNeCCcCdfCCedCefgChg".parse().unwrap(),
+            // [(p -> (q -> p)) -> ([(-r -> (s -> -t)) -> [(r -> (s -> u)) -> ((t -> s) -> (t -> u))]] -> v)] -> (w -> v)
+            "CCCpCqpCCCNrCsNtCCrCsuCCtsCtuvCwv".parse().unwrap(),
         ]
         .into()
     }
 
     pub fn meredith() -> Vec<Normal<ImpNeg>> {
-        ["CCCCCabCNcNdceCCeaCda".parse().unwrap()].into()
+        ["CCCCCpqCNrNsrtCCtpCsp".parse().unwrap()].into()
     }
 }
