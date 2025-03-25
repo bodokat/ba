@@ -36,7 +36,7 @@ fn main() -> io::Result<()> {
 
     let search = args.search.map(|f| f.parse().unwrap());
 
-    let mut context = Context::new(&langs::ImpNeg::lukasiewicz_tarski());
+    let mut context = Context::new(&langs::ImpNeg::meredith());
     let runs = args.iterations;
 
     let mut found = None;
@@ -46,7 +46,7 @@ fn main() -> io::Result<()> {
 
         let num_entries = context.entries.len();
 
-        println!("run {run}, {num_entries} new");
+        println!("run {run}, now {num_entries} entries");
 
         if let Some(f) = &search {
             if let Some(formula) = context.entries.get(f) {
@@ -60,20 +60,6 @@ fn main() -> io::Result<()> {
                 println!("Formula ({f}) not found in iteration {run}");
             }
         }
-
-        // if let Some(search) = &search {
-        //     let found = AtomicBool::new(false);
-        //     context.step(|f1, f2, f| {
-        //         if f == search {
-        //             println!("Found formula ({f}) after {run} iterations");
-        //             println!("From MP with ({f1}), ({f2})");
-        //             found.store(true, Ordering::Relaxed);
-        //         }
-        //     });
-        //     if found.load(Ordering::Relaxed) {
-        //         break;
-        //     }
-        // }
 
         println!("run {run} complete");
     }
@@ -122,9 +108,12 @@ fn main() -> io::Result<()> {
             let mut derivation = derivation.drain().collect::<Vec<_>>();
             derivation.sort_by_key(|(i, _)| *i);
 
-            for (i, (meta, formula)) in derivation {
+            for (i, (meta, formula)) in &derivation {
                 println!("{i}: {formula} ({s})", s = meta.sources.iter().join("; "));
             }
+
+            dbg!(&derivation.len());
+            dbg!(&found.sources.len());
         }
     }
 
